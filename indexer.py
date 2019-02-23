@@ -9,6 +9,7 @@ import heapq
 from sklearn import feature_extraction
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
+import numpy as np
 
 from collections import Counter
 
@@ -20,13 +21,32 @@ keys = ['Paragraph','Title','Span','Others']  # content tags that need to be ext
 page_id_list = []
 page_content_list = []
 
-# '''
-# tokenize the input sentences and update the Word Count data set (Counter)
-# '''
-# def tokenize(document):
-#     document = re.sub(spliter, " ", document)  # replace some special char like -
-#     texts_tokenized = [word.lower() for word in nltk.tokenize.word_tokenize(document)] # use nltk to split the english word and ignore some other punctuations
-#     return texts_tokenized
+'''
+tokenize the input sentences and update the Word Count data set (Counter)
+'''
+def tokenize():
+    '''
+    {
+        word: {
+            page_id: num,
+            page_id: num,
+        }
+    }
+    '''
+    count = {}
+    for i in range(len(page_content_list)):
+        document = re.sub(spliter, " ", page_content_list[i])  # replace some special char like -
+        texts_tokenized = [word.lower() for word in nltk.tokenize.word_tokenize(document)] # use nltk to split the english word and ignore some other punctuations
+        for word in texts_tokenized:
+            if word in count.keys():
+                if page_id_list[i] in count[word].keys():
+                    count[word][page_id_list[i]] += 1
+                else:
+                    count[word][page_id_list[i]] = 1
+            else:
+                count[word] = {}
+                count[word][page_id_list[i]] = 1
+    return count
 
 '''
 merge tag such as Paragraph or Title
@@ -65,26 +85,37 @@ structure (temporal data, not final index) would be :
     word2: []
 }
 '''
-def construct():
+def construct(count_dict):
     dictionary = {}
-    vectorizer = CountVectorizer()
-    transformer = TfidfTransformer()
-    tfidf = transformer.fit_transform(vectorizer.fit_transform(page_content_list))
-    word = vectorizer.get_feature_names() # already sorted
-    weight = tfidf.toarray()
-    for i in range(len(weight)):
-        # print(u"-------Page ",i,u" word list------")
-        for j in range(len(word)):
-            # print(word[j],weight[i][j])
-            if weight[i][j] == 0.0:
-                continue
-            if word[j] in dictionary.keys():
-                dictionary[word[j]].append((page_id_list[i], weight[i][j]))
+    for word in count_dict.keys():
+        for page_id in count_dict[word].keys():
+            if word in dictionary.keys():
+                dictionary[word].append((page_id, calculate_tfidf(count_dict[word][page_id], len(count_dict[word].keys()))   ))
             else:
                 postings = []
-                postings.append((page_id_list[i], weight[i][j]))
-                dictionary[word[j]] = postings
+                postings.append((page_id, calculate_tfidf(count_dict[word][page_id], len(count_dict[word].keys()))  ))
+                dictionary[word] = postings
     return dictionary
+# def construct():
+#     dictionary = {}
+#     vectorizer = CountVectorizer()
+#     transformer = TfidfTransformer()
+#     tfidf = transformer.fit_transform(vectorizer.fit_transform(page_content_list))
+#     word = vectorizer.get_feature_names() # already sorted
+#     weight = tfidf.toarray()
+#     for i in range(len(weight)):
+#         # print(u"-------Page ",i,u" word list------")
+#         for j in range(len(word)):
+#             # print(word[j],weight[i][j])
+#             if weight[i][j] == 0.0:
+#                 continue
+#             if word[j] in dictionary.keys():
+#                 dictionary[word[j]].append((page_id_list[i], weight[i][j]))
+#             else:
+#                 postings = []
+#                 postings.append((page_id_list[i], weight[i][j]))
+#                 dictionary[word[j]] = postings
+#     return dictionary
 
 '''
 transform the dict to json format.
@@ -103,11 +134,17 @@ def formalize(dictionary):
         postings = {}
         sort(dictionary[key])
         for pair in dictionary[key]:  # transfor from list to dict
-            postings[pair[0]] = pair[1]
+            postings[pair[0]] = round(pair[1],4)
         dictionary[key] = postings
 
 def sort(postings):  
     return sorted(postings,key = lambda pair: pair[1], reverse=True) 
+
+def calculate_tfidf(tf,df):
+    if tf==0 or df==0:
+        return 0
+    else:
+        return (tf) * (np.log10(  (len(page_id_list)+1)/  (df+1) ) +1)
 
 def output(d, outfile="dictionary.json"):
     with open(outfile,'w') as f:
@@ -115,7 +152,7 @@ def output(d, outfile="dictionary.json"):
 
 def indexer():
     handle_input()  # read all the raw data, and merge content as a string
-    dictionary = construct()  # build inverted index
+    dictionary = construct(tokenize())  # build inverted index
     formalize(dictionary)
     output(dictionary)
     
