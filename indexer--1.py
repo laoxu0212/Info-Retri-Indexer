@@ -1,3 +1,4 @@
+#March 5th edition
 import nltk
 import re
 import string
@@ -59,7 +60,7 @@ def handle_input():
                 text = merge_text(data[key])  # merge tag such as Paragraph or Title
                 page_id_list.append(key)
                 page_content_list.append(text)
-
+#
 '''
 construct index using TfidfTransformer
 structure (temporal data, not final index) would be :
