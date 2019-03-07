@@ -1,5 +1,7 @@
-#MARCH 5th, Xiangyu Version
+#MARCH 6th, Xiangyu Version 2
+
 import json
+import heapq
 import sys
 import os
 import re
@@ -35,7 +37,7 @@ def build_queryVec(query_list):
     totalDoc = 37497
     idf_list = [0]*(len(term_list)-1)
     for i in range(len(query_list)):
-        if dictionary.__contains__(query_list[i]):
+        if dictionary.__contains__(query_list[i]) and query_list[i] in term_list:
             idf_list[term_list.index(query_list[i])-1] = totalDoc/len(dictionary[query_list[i]])
 
     #calculate tf for each word
@@ -48,14 +50,14 @@ def build_queryVec(query_list):
         query_vec[j] = query_vec[j]*idf_list[j]
     query_vec = np.array(query_vec)
     #Do nomalization here
-    np.seterr(divide='ignore',invalid='ignore')
+    #np.seterr(divide='ignore',invalid='ignore')
     query_vec = query_vec / np.linalg.norm(query_vec)
     return query_vec
 
 
 def search(query):
 
-    if len(query)==0:
+    if(len(query)==0):
         print("No query！")
         return
     #pre-process the query and put each word in list:query_list
@@ -69,36 +71,69 @@ def search(query):
     query_vec = build_queryVec(query_list).reshape(1,-1)
 
     flag = False
-    result = {}
-    document_list = dictionary.keys()
+    result = []
+    posting_set = set()
+    
     for word in query_list:
         if dictionary.__contains__(word):
             flag = True
             postings = dictionary[word]
-            #print(postings)
             for document in postings.keys():
-                if document in document_ids:
-                    index = document_ids.index(document)
-                    document_vec = np.float32(weight_matrix.iloc[index,1:].values).reshape(1,-1)
-                    '''
-                    print(document)
-                    print(query_vec.shape)
-                    print(document_vec.shape)
-                    print(query_vec)
-                    print(document_vec)
-                    '''
-                    score = cosine_similarity(query_vec,document_vec)[0][0]
-                    result[document] = score
-
+                posting_set.add(document)
 
     if flag==False:
-        print("not found!")
+    	print("not found!")
+    	return
+    for document in posting_set:
+        if document in document_ids:
+            index = document_ids.index(document)
+            document_vec = np.float32(weight_matrix.iloc[index,1:].values).reshape(1,-1)
+            '''
+            print(document)
+            print(query_vec.shape)
+            print(document_vec.shape)
+            print(query_vec)
+            print(document_vec)
+            '''
+            score = cosine_similarity(query_vec,document_vec)[0][0]
+            insert(result,(score,document))
+
+    #The situation that score is toooo low
+    '''
+    if(result[result[]]<0.0001):
+        print("Did not match any documents.")
         return
-    result = sorted(result.items(),key=lambda d:d[1],reverse=True)
-    for res in result:
-        print(page_ids[res[0]])
+    '''
+    #result = [(score,url)]
+    result_list = []
+    while len(result)!=0:
+    	res = heapq.heappop(result)
+    	result_list.append(page_ids[res[1]])
+
+    result_list.reverse()
+    for res in result_list:
+    	print(res)
+#To maintain a max-heap with size 100
+def insert(a, val):
+	if(len(a) >= 100):
+		if(val > a[0]):
+			heapq.heappop(a)
+			heapq.heappush(a, val)
+	else:
+		heapq.heappush(a, val)
+
+
+
 
 
 if __name__ == '__main__':
     query = sys.argv[1:]
     search(query)
+
+    ######################
+    #Some optimization:
+    #   Use heap
+    #   No weighting query
+    #   Index-elimination, only calculate the low idf(stop words), only considerthe documents has more query words
+    #   only consider top postings('championList')
+    #   
