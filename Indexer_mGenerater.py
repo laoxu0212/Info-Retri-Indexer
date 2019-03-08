@@ -11,18 +11,20 @@ from sklearn import feature_extraction
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 import numpy as np
+import math
 cacheStopWords = nltk.corpus.stopwords.words("english") #dictionary of stop words
 
 from collections import Counter
 
 snow = nltk.stem.SnowballStemmer("english")
 
-data_dir = "Data1/"
+data_dir = "DataTest/"
 spliter = re.compile(r'[^0-9a-zA-Z]+', re.S)   # Reg that replace all char except number and english
 counter = Counter()
 keys = ['Paragraph','Title','Span','Others','Link_Name','url','h1_h2','h3_h5','Strong']  # content tags that need to be extracted
 page_id_list = []
 page_content_list = []
+stemmed_page_list = []
 tag_weight = {}
 
 tag_value = {   'Title': 10,
@@ -33,44 +35,46 @@ tag_value = {   'Title': 10,
                 'Paragraph': 1,
                 'Span': 1,
                 'h3_h5': 1,
-                'Others': 0.1}
+                'Others': 1}
 
 
 '''
 tokenize the input sentences and update the Word Count data set (Counter)
 '''
-def tokenize():
-    print("function tokenize")
-    '''
-    {
-        word: {
-            page_id: num,
-            page_id: num,
-        }
-    }
-    '''
-    count= {}
-    stemmed_page_list = []
-    for i in range(len(page_content_list)):
-        document = re.sub(spliter, " ", page_content_list[i])  # replace some special char like -
-        texts_tokenized = [snow.stem(word.lower()) for word in nltk.tokenize.word_tokenize(document)] # use nltk to split the english word and ignore some other punctuations
-        for word in texts_tokenized:
-            if word in count.keys():
-                if page_id_list[i] in count[word].keys():
-                    count[word][page_id_list[i]] += 1
-                else:
-                    count[word][page_id_list[i]] = 1
-            else:
-                count[word] = {}
-                count[word][page_id_list[i]] = 1
-        stemmed_page_list.append(" ".join(texts_tokenized))
-    return count, stemmed_page_list
+# def tokenize():
+#     print("function tokenize")
+#     '''
+#     {
+#         word: {
+#             page_id: num,
+#             page_id: num,
+#         }
+#     }
+#     '''
+#     count= {}
+#     stemmed_page_list = []
+#     for i in range(len(page_content_list)):
+#         document = re.sub(spliter, " ", page_content_list[i])  # replace some special char like -
+#         texts_tokenized = [snow.stem(word.lower()) for word in nltk.tokenize.word_tokenize(document)] # use nltk to split the english word and ignore some other punctuations
+#         for word in texts_tokenized:
+#             if word in count.keys():
+#                 if page_id_list[i] in count[word].keys():
+#                     count[word][page_id_list[i]] += 1
+#                 else:
+#                     count[word][page_id_list[i]] = 1
+#             else:
+#                 count[word] = {}
+#                 count[word][page_id_list[i]] = 1
+#         stemmed_page_list.append(" ".join(texts_tokenized))
+#     return count, stemmed_page_list
 
 '''
 merge tag such as Paragraph or Title
 '''
 def merge_text(page, key=""):
+    # print("Let's merge")
     content_str = ''
+    texts_tokenized_all = []
     for k in keys:
         if len(page[k]) == 0:
             continue
@@ -86,6 +90,8 @@ def merge_text(page, key=""):
                 else:
                     tag_weight[word][key] = tag_value[k]         
             content_str += sentence + " "
+            texts_tokenized_all.extend(texts_tokenized)
+    stemmed_page_list.append(" ".join(texts_tokenized_all))
     return content_str
 
 '''
@@ -97,6 +103,7 @@ def handle_input():
     print('handle_input')
     dirs = os.listdir(data_dir)
     for i in range(0,len(dirs)):
+        print(dirs[i])
         path = os.path.join(data_dir,dirs[i])
         with open(path,'r',encoding = 'utf-8') as f: 
             data = json.load(f)
@@ -113,18 +120,17 @@ structure (temporal data, not final index) would be :
     word2: []
 }
 '''
-def construct(count_dict):
-    print("function construct")
-    dictionary = {}
-    for word in count_dict.keys():
-        for page_id in count_dict[word].keys():
-            if word in dictionary.keys():
-                dictionary[word].append((page_id, calculate_tfidf(count_dict[word][page_id], len(count_dict[word].keys()))   ))
-            else:
-                postings = []
-                postings.append((page_id, calculate_tfidf(count_dict[word][page_id], len(count_dict[word].keys()))  ))
-                dictionary[word] = postings
-    return dictionary
+# def construct(count_dict):
+#     print("function construct")
+#     for word in count_dict.keys():
+#         for page_id in count_dict[word].keys():
+#             if word in dictionary.keys():
+#                 dictionary[word].append((page_id, calculate_tfidf(count_dict[word][page_id], len(count_dict[word].keys()))   ))
+#             else:
+#                 postings = []
+#                 postings.append((page_id, calculate_tfidf(count_dict[word][page_id], len(count_dict[word].keys()))  ))
+#                 dictionary[word] = postings
+#     return dictionary
 
 '''
 weight_matrix.csv
@@ -139,14 +145,24 @@ find the document name from  page_id_list
 '''
 
 def Matrix_Generator(stemmed_page_list):
+    print("Start generate Matrix")
+    with open('weight.json','r',encoding = 'utf-8') as f: 
+        weight = json.load(f)
     dictionary = {}
     vectorizer = CountVectorizer()
     transformer = TfidfTransformer()
     tfidf = transformer.fit_transform(vectorizer.fit_transform(stemmed_page_list))
     word = vectorizer.get_feature_names() # already sorted
-    weight = tfidf.toarray()
-    #write the weight matrix in cvs
-    pd_data = pd.DataFrame(weight,index=page_id_list,columns=word)
+    Matrix = tfidf.toarray()
+    for i in range(1,len(Matrix[0])):
+        for j in range(len(Matrix)):
+            if(Matrix[j][i]!=0):
+                if word[i] in weight.keys():
+                    if page_id_list[j] in weight[word[i]].keys():
+                        log_weight = math.log(weight[word[i]][page_id_list[j]],10)
+                        Matrix[j][i] *= log_weight
+    #write the Matrix in cvs
+    pd_data = pd.DataFrame(Matrix,index=page_id_list,columns=word)
     pd_data.to_csv('weight_matrix.csv')
 
 '''
@@ -184,12 +200,13 @@ def output(d, outfile="dictionary.json"):
 
 def indexer():
     handle_input()  # read all the raw data, and merge content as a string
-    count, stemmed_page_list = tokenize()
-    dictionary = construct(count)  # build inverted index
-    Matrix_Generator(stemmed_page_list)
-    formalize(dictionary)
-    output(dictionary)
+    # count, stemmed_page_list = tokenize()
+    #dictionary = construct(count)  # build inverted index
     output(tag_weight, outfile="weight.json")
+    Matrix_Generator(stemmed_page_list)
+    #formalize(dictionary)
+    #output(dictionary)
+    
     
 if __name__ == '__main__':
     args = sys.argv
