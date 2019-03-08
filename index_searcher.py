@@ -11,13 +11,15 @@ with open('dictionary.json','r',encoding = 'utf-8') as f:
 with open(os.path.join(raw_dir,'bookkeeping.json'),'r',encoding = 'utf-8') as f: 
     page_ids = json.load(f)
 
-def search(word):
+def search(word, limit = 20):
     if word not in dictionary.keys():
         print("not found!")
         return
     postings = dictionary[word]
-    # for page_id in postings.keys():
-    #     print(page_ids[page_id])
+    with open(word+'.txt','w') as f:
+        for page_id in postings.keys():
+            f.write(page_ids[page_id]+"\n")
+        
     print(len(dictionary[word]))
 
 def adhoc():
