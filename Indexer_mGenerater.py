@@ -11,13 +11,14 @@ from sklearn import feature_extraction
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 import numpy as np
+import math
 cacheStopWords = nltk.corpus.stopwords.words("english") #dictionary of stop words
 
 from collections import Counter
 
 snow = nltk.stem.SnowballStemmer("english")
 
-data_dir = "Data1/"
+data_dir = "Data/"
 spliter = re.compile(r'[^0-9a-zA-Z]+', re.S)   # Reg that replace all char except number and english
 counter = Counter()
 keys = ['Paragraph','Title','Span','Others','Link_Name','url','h1_h2','h3_h5','Strong']  # content tags that need to be extracted
@@ -33,7 +34,7 @@ tag_value = {   'Title': 10,
                 'Paragraph': 1,
                 'Span': 1,
                 'h3_h5': 1,
-                'Others': 0.1}
+                'Others': 1}
 
 
 '''
@@ -70,6 +71,7 @@ def tokenize():
 merge tag such as Paragraph or Title
 '''
 def merge_text(page, key=""):
+    print("Let's merge")
     content_str = ''
     for k in keys:
         if len(page[k]) == 0:
@@ -115,7 +117,6 @@ structure (temporal data, not final index) would be :
 '''
 def construct(count_dict):
     print("function construct")
-    dictionary = {}
     for word in count_dict.keys():
         for page_id in count_dict[word].keys():
             if word in dictionary.keys():
@@ -139,14 +140,24 @@ find the document name from  page_id_list
 '''
 
 def Matrix_Generator(stemmed_page_list):
+    print("Start generate Matrix")
+    with open('weight.json','r',encoding = 'utf-8') as f: 
+        weight = json.load(f)
     dictionary = {}
     vectorizer = CountVectorizer()
     transformer = TfidfTransformer()
     tfidf = transformer.fit_transform(vectorizer.fit_transform(stemmed_page_list))
     word = vectorizer.get_feature_names() # already sorted
-    weight = tfidf.toarray()
-    #write the weight matrix in cvs
-    pd_data = pd.DataFrame(weight,index=page_id_list,columns=word)
+    Matrix = tfidf.toarray()
+    for i in range(1,len(Matrix[0])):
+        for j in range(len(Matrix)):
+            if(Matrix[j][i]!=0):
+                if word[i] in weight.keys():
+                    if page_id_list[j] in weight[word[i]].keys():
+                        log_weight = math.log(weight[word[i]][page_id_list[j]],10)
+                        Matrix[j][i] *= log_weight
+    #write the Matrix in cvs
+    pd_data = pd.DataFrame(Matrix,index=page_id_list,columns=word)
     pd_data.to_csv('weight_matrix.csv')
 
 '''
@@ -185,10 +196,10 @@ def output(d, outfile="dictionary.json"):
 def indexer():
     handle_input()  # read all the raw data, and merge content as a string
     count, stemmed_page_list = tokenize()
-    dictionary = construct(count)  # build inverted index
+    #dictionary = construct(count)  # build inverted index
     Matrix_Generator(stemmed_page_list)
-    formalize(dictionary)
-    output(dictionary)
+    #formalize(dictionary)
+    #output(dictionary)
     output(tag_weight, outfile="weight.json")
     
 if __name__ == '__main__':
