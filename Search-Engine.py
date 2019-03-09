@@ -1,15 +1,14 @@
-#MARCH 6th, Xiangyu Version 2
 
 import json
 import heapq
 import sys
 import os
 import re
-import pandas as pd
 import numpy as np
 import nltk
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
+import sqlite3 as sql
 
 
 raw_dir = 'WEBPAGES_RAW'
@@ -21,13 +20,26 @@ with open('dictionary.json','r',encoding = 'utf-8') as f:
     dictionary = json.load(f)
 with open(os.path.join(raw_dir,'bookkeeping.json'),'r',encoding = 'utf-8') as f: 
     page_ids = json.load(f)
+with open('stem_list','r',encoding = 'utf-8') as f: 
+    Mapping = json.load(f)
+
+'''
+Mapping = {list:[doc1, doc2,...],ids : [id1, id2 ...]}
+'''
 try:
-    weight_matrix = pd.read_csv('weight_matrix.csv')
+    con = sql.connect('test.db')
+    cur = con.cursor()
+    cur.execute("SELECT * FROM matrix")
+    d = cur.fetchall()
+    Matrix = []
+    for i in range(len(d)):
+        for _list in eval(d[i][1]):
+            Matrix.append(_list)
 except FileNotFoundError:
     print('file not found!!')
 else:
-    term_list = list(weight_matrix.columns.values)#terms list
-    document_ids = list(weight_matrix.iloc[:,0].values)#document IDs list
+    term_list = Mapping['vocabulary']#terms list
+    document_ids = Mapping['ids']#document IDs list
 
 cacheStopWords = nltk.corpus.stopwords.words("english")
 
@@ -50,7 +62,6 @@ def build_queryVec(query_list):
         query_vec[j] = query_vec[j]*idf_list[j]
     query_vec = np.array(query_vec)
     #Do nomalization here
-    #np.seterr(divide='ignore',invalid='ignore')
     query_vec = query_vec / np.linalg.norm(query_vec)
     return query_vec
 
@@ -87,7 +98,7 @@ def search(query):
     for document in posting_set:
         if document in document_ids:
             index = document_ids.index(document)
-            document_vec = np.float32(weight_matrix.iloc[index,1:].values).reshape(1,-1)
+            document_vec = np.float32(Matrix[index,1:].values).reshape(1,-1)
             '''
             print(document)
             print(query_vec.shape)
@@ -129,11 +140,3 @@ def insert(a, val):
 if __name__ == '__main__':
     query = sys.argv[1:]
     search(query)
-
-    ######################
-    #Some optimization:
-    #   Use heap
-    #   No weighting query
-    #   Index-elimination, only calculate the low idf(stop words), only considerthe documents has more query words
-    #   only consider top postings('championList')
-    #   
