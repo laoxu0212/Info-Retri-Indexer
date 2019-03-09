@@ -137,6 +137,7 @@ structure (temporal data, not final index) would be :
 #                 dictionary[word] = postings
 #     return dictionary
 
+
 '''
 weight_matrix.csv
 structure {
