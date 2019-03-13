@@ -34,7 +34,6 @@ document_ids = Mapping['ids']#document IDs list
 cacheStopWords = nltk.corpus.stopwords.words("english")
 
 def Matrix_Generator():
-    print("Start generate Matrix")
     # with open('weight.json','r',encoding = 'utf-8') as f: 
     #     weight = json.load(f)
     vectorizer = CountVectorizer()
@@ -55,7 +54,6 @@ def Matrix_Generator():
 #Queries
 def build_queryVec(query_list,term_list):
     #calculate idf for each word in query
-    print(len(term_list))
     totalDoc = 37497
     idf_list = [0]*(len(term_list)-1)
     for i in range(len(query_list)):
@@ -86,10 +84,14 @@ def search(query,Matrix,term_list):
     cleaner = re.compile(r'[^0-9a-zA-Z]+', re.S)
     query = re.sub(cleaner, ' ', query)
     q = nltk.tokenize.word_tokenize(query)
-    snow = nltk.stem.SnowballStemmer("english") #stemmer
-    query_list = [snow.stem(word) for word in q if word not in cacheStopWords and word in term_list]
+    snow = nltk.stem.SnowballStemmer("english") #stemmers
+    query_list = [snow.stem(word) for word in q]
+    flag = False
+    for item in query_list:
+        if item in dictionary.keys():
+            flag = True
     print(query_list)
-    if(len(query_list)==0):
+    if not flag :
         print("No matching result")
         return
 
