@@ -1,14 +1,16 @@
 
+
 import json
 import heapq
-import sys
+import math
 import os
 import re
 import numpy as np
 import nltk
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
-import sqlite3 as sql
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.feature_extraction.text import CountVectorizer
 
 
 raw_dir = 'WEBPAGES_RAW'
@@ -16,36 +18,44 @@ global dictionary
 global page_ids
 global weight_matrix
 
-with open('dictionary.json','r',encoding = 'utf-8') as f: 
+with open('stem_dict.json','r',encoding = 'utf-8') as f: 
     dictionary = json.load(f)
 with open(os.path.join(raw_dir,'bookkeeping.json'),'r',encoding = 'utf-8') as f: 
     page_ids = json.load(f)
-with open('stem_list','r',encoding = 'utf-8') as f: 
+with open('stem_list.json','r',encoding = 'utf-8') as f: 
     Mapping = json.load(f)
 
 '''
-Mapping = {list:[doc1, doc2,...],ids : [id1, id2 ...]}
+Mapping = {list:[doc1_content, doc2_content,...],ids : [id1, id2 ...]}
 '''
-try:
-    con = sql.connect('test.db')
-    cur = con.cursor()
-    cur.execute("SELECT * FROM matrix")
-    d = cur.fetchall()
-    Matrix = []
-    for i in range(len(d)):
-        for _list in eval(d[i][1]):
-            Matrix.append(_list)
-except FileNotFoundError:
-    print('file not found!!')
-else:
-    term_list = Mapping['vocabulary']#terms list
-    document_ids = Mapping['ids']#document IDs list
 
+content_list = Mapping['list']#content list
+document_ids = Mapping['ids']#document IDs list
 cacheStopWords = nltk.corpus.stopwords.words("english")
 
+def Matrix_Generator():
+    print("Start generate Matrix")
+    # with open('weight.json','r',encoding = 'utf-8') as f: 
+    #     weight = json.load(f)
+    vectorizer = CountVectorizer()
+    transformer = TfidfTransformer()
+    tfidf = transformer.fit_transform(vectorizer.fit_transform(Mapping['list']))
+    term_list = vectorizer.get_feature_names() # already sorted
+
+    Matrix = tfidf.toarray()
+    # for i in range(len(Matrix[0])):
+    #     for j in range(len(Matrix)):
+    #         if(Matrix[j][i]==0 and term_list[i] in weight.keys()):
+    #             log_weight = math.log(weight[term_list[i]][document_ids[j]],10)
+    #             Matrix[j][i] *= log_weight
+                
+    # print('weighted')
+    return Matrix,term_list
+
 #Queries
-def build_queryVec(query_list):
+def build_queryVec(query_list,term_list):
     #calculate idf for each word in query
+    print(len(term_list))
     totalDoc = 37497
     idf_list = [0]*(len(term_list)-1)
     for i in range(len(query_list)):
@@ -66,39 +76,38 @@ def build_queryVec(query_list):
     return query_vec
 
 
-def search(query):
+def search(query,Matrix,term_list):
 
     if(len(query)==0):
-        print("No query！")
+        print("No query!!!")
         return
     #pre-process the query and put each word in list:query_list
+    query = query.lower()
     cleaner = re.compile(r'[^0-9a-zA-Z]+', re.S)
-    query_list = [item.lower() for item in query]
-    for item in query_list:
-        item = re.sub(cleaner, ' ', item)
-        item = nltk.tokenize.word_tokenize(item)
+    query = re.sub(cleaner, ' ', query)
+    q = nltk.tokenize.word_tokenize(query)
+    snow = nltk.stem.SnowballStemmer("english") #stemmer
+    query_list = [snow.stem(word) for word in q if word not in cacheStopWords and word in term_list]
     print(query_list)
+    if(len(query_list)==0):
+        print("No matching result")
+        return
 
-    query_vec = build_queryVec(query_list).reshape(1,-1)
+    query_vec = build_queryVec(query_list,term_list).reshape(1,-1)
 
-    flag = False
     result = []
     posting_set = set()
     
     for word in query_list:
-        if dictionary.__contains__(word):
-            flag = True
-            postings = dictionary[word]
-            for document in postings.keys():
-                posting_set.add(document)
+        postings = dictionary[word]
+        for document in postings.keys():
+            posting_set.add(document)
 
-    if flag==False:
-    	print("not found!")
-    	return
+
     for document in posting_set:
         if document in document_ids:
             index = document_ids.index(document)
-            document_vec = np.float32(Matrix[index,1:].values).reshape(1,-1)
+            document_vec = Matrix[index,1:].reshape(1,-1)
             '''
             print(document)
             print(query_vec.shape)
@@ -109,12 +118,6 @@ def search(query):
             score = cosine_similarity(query_vec,document_vec)[0][0]
             insert(result,(score,document))
 
-    #The situation that score is toooo low
-    '''
-    if(result[result[]]<0.0001):
-        print("Did not match any documents.")
-        return
-    '''
     #result = [(score,url)]
     result_list = []
     while len(result)!=0:
@@ -134,9 +137,8 @@ def insert(a, val):
 		heapq.heappush(a, val)
 
 
-
-
-
 if __name__ == '__main__':
-    query = sys.argv[1:]
-    search(query)
+    Matrix, term_list = Matrix_Generator()
+    while(True):
+        query = input("What can I do for you: ")
+        search(query,Matrix,term_list)
